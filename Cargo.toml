@@ -1,0 +1,14 @@
+[package]
+name = "recently-used-xbel"
+version = "1.0.0"
+edition = "2021"
+description = "Parse the ~/.local/share/recently-used.xbel file"
+repository = "https://github.com/pop-os/recently-used-xbel"
+license = "MPL-2.0"
+keywords = ["recently", "used", "xbel"]
+
+[dependencies]
+dirs = "4.0.0"
+serde = { version = "1.0.136", features = ["derive"] }
+serde-xml-rs = "0.5.1"
+thiserror = "1.0.30"
