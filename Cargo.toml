@@ -12,3 +12,8 @@ dirs = "4.0.0"
 serde = { version = "1.0.136", features = ["derive"] }
 serde-xml-rs = "0.5.1"
 thiserror = "1.0.30"
+chrono = "0.4"
+url = "2.5.2"
+
+[dev-dependencies]
+tempfile = "3.12.0"
