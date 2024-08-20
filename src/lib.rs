@@ -28,6 +28,7 @@ pub struct RecentlyUsed {
 
 /// A file that was recently opened by the desktop user.
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename = "bookmark")]
 pub struct Bookmark {
     /// The location of the file.
     pub href: String,
