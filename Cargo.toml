@@ -9,8 +9,8 @@ keywords = ["recently", "used", "xbel"]
 
 [dependencies]
 dirs = "4.0.0"
-serde = { version = "1.0.136", features = ["derive"] }
-serde-xml-rs = "0.6"
+serde = { version = "1.0.139", features = ["derive"] }
+quick-xml = { version = "0.36.1", features = ["overlapped-lists", "serialize", "serde-types"]} 
 thiserror = "1.0.30"
 chrono = "0.4"
 url = "2.5.2"

@@ -4,17 +4,27 @@
 //! Parse the `~/.local/share/recently-used.xbel` file
 //!
 //! ```
-//! let recently_used = match recently_used_xbel::parse_file()?;
+//! fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     let recently_used = recently_used_xbel::parse_file()?;
 //!
-//! for bookmark in recently_used.bookmarks {
-//!     println!("{:?}", bookmark);
+//!     for bookmark in recently_used.bookmarks {
+//!         println!("{:?}", bookmark);
+//!     }
+//!
+//!     Ok(())
 //! }
 //! ```
 
 use chrono::{DateTime, Utc};
+use quick_xml::se::to_string as quick_to_string;
+use quick_xml::DeError;
 use serde::{Deserialize, Serialize};
-use serde_xml_rs::to_string;
-use std::{fs::OpenOptions, io::Write, path::PathBuf, time::SystemTime};
+use std::{
+    fs::{self, OpenOptions},
+    io::Write,
+    path::PathBuf,
+    time::SystemTime,
+};
 use url::Url;
 
 /// Stores recently-opened files accessed by the desktop user.
@@ -28,15 +38,19 @@ pub struct RecentlyUsed {
 
 /// A file that was recently opened by the desktop user.
 #[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename = "bookmark")]
+#[serde(rename_all = "kebab-case")]
 pub struct Bookmark {
     /// The location of the file.
+    #[serde(rename = "@href")]
     pub href: String,
     /// When the file was added to the list.
+    #[serde(rename = "@added")]
     pub added: String,
     /// When the file was last modified.
+    #[serde(rename = "@modified")]
     pub modified: String,
     /// When the file was last visited.
+    #[serde(rename = "@visited")]
     pub visited: String,
 }
 
@@ -46,9 +60,11 @@ pub enum Error {
     #[error("~/.local/share/recently-used.xbel: file does not exist")]
     DoesNotExist,
     #[error("~/.local/share/recently-used.xbel: could not deserialize")]
-    Deserialization(#[source] serde_xml_rs::Error),
+    Deserialization(#[source] DeError),
     #[error("could not serialize new file")]
-    Serialization(#[source] serde_xml_rs::Error),
+    Serialization(#[source] DeError),
+    #[error("could not read recents file")]
+    Read(#[source] std::io::Error),
     #[error("could not read metadata from path")]
     Metadata(#[source] std::io::Error),
     #[error("could not read generate href from path")]
@@ -65,22 +81,40 @@ pub fn dir() -> Option<PathBuf> {
 /// Convenience function for parsing the recently-used.xbel file in its default location.
 pub fn parse_file() -> Result<RecentlyUsed, Error> {
     let path = dir().ok_or(Error::DoesNotExist)?;
-    let file = std::fs::File::open(&*path).map_err(|_| Error::DoesNotExist)?;
-    serde_xml_rs::from_reader(file).map_err(Error::Deserialization)
+    let file_content = fs::read_to_string(&path).map_err(|err| Error::Read(err))?;
+    quick_xml::de::from_str(&file_content).map_err(|err| Error::Deserialization(err))
 }
 
-/// Function to update a recently used file.
-/// It check if the file exist in the list and udate it,
-/// otherwise add it
-pub fn update_recenty_used(element_path: &PathBuf) -> Result<(), Error> {
+/// Updates the list of recently used files.
+///
+/// This function checks if the specified file already exists in the recently used list.
+/// If it exists, the function updates the file's metadata (such as added, modified, and visited).
+/// If it does not exist, the function adds a new entry for the file.
+///
+/// # Arguments
+///
+/// * `element_path` - A `PathBuf` that represents the path to the file being updated or added.
+///
+/// # Returns
+///
+/// This function returns `Result<(), Error>`, which is:
+/// - `Ok(())` on success.
+/// - `Err(Error)` if there is a failure in processing the file (e.g., reading metadata, serialization, or file I/O).
+///
+/// # Errors
+///
+/// This function can return errors in the following cases:
+///
+/// - If the file's metadata cannot be accessed or read.
+/// - If the recently used file list cannot be parsed or serialized.
+/// - If there is an issue writing the updated list back to the file system.
+pub fn update_recently_used(element_path: &PathBuf) -> Result<(), Error> {
     let mut parsed_file = parse_file()?;
 
-    let metadata = element_path
-        .metadata()
-        .map_err(|err| Error::Metadata(err))?;
-    let added = system_time_to_string(metadata.created().map_err(|err| Error::Metadata(err))?);
-    let modified = system_time_to_string(metadata.modified().map_err(|err| Error::Metadata(err))?);
-    let visited = system_time_to_string(metadata.accessed().map_err(|err| Error::Metadata(err))?);
+    let metadata = element_path.metadata().map_err(Error::Metadata)?;
+    let added = system_time_to_string(metadata.created().map_err(Error::Metadata)?);
+    let modified = system_time_to_string(metadata.modified().map_err(Error::Metadata)?);
+    let visited = system_time_to_string(metadata.accessed().map_err(Error::Metadata)?);
     let href = path_to_href(element_path).ok_or(Error::Path)?;
 
     let bookmark = Bookmark {
@@ -90,24 +124,24 @@ pub fn update_recenty_used(element_path: &PathBuf) -> Result<(), Error> {
         visited,
     };
 
+    // Remove the old bookmark if it exists, and add the updated one
+    parsed_file.bookmarks.retain(|b| b.href != bookmark.href);
     parsed_file.bookmarks.push(bookmark);
 
-    let serialized = to_string(&parsed_file).map_err(Error::Serialization)?;
+    let serialized = quick_to_string(&parsed_file).map_err(Error::Serialization)?;
 
-    let recenty_used_file_path = match dir() {
-        Some(path) => path,
-        None => return Err(Error::DoesNotExist),
-    };
+    let recently_used_file_path = dir().ok_or(Error::DoesNotExist)?;
 
     let mut file = OpenOptions::new()
         .write(true)
         .truncate(true)
         .create(true)
-        .open(recenty_used_file_path)
+        .open(recently_used_file_path)
         .map_err(|_| Error::Update)?;
 
     file.write_all(serialized.as_bytes())
         .map_err(|_| Error::Update)?;
+
     Ok(())
 }
 
@@ -142,16 +176,16 @@ mod tests {
             create_empty_recently_used_file(&recently_used_path)?;
         }
 
-        update_recenty_used(&temp_file_path)?;
+        update_recently_used(&temp_file_path)?;
 
         let content = fs::read_to_string(recently_used_path)?;
-        assert!(content.contains("file://"));
+        assert!(content.contains("test_file.txt"));
         Ok(())
     }
 
     fn create_empty_recently_used_file(path: &PathBuf) -> Result<(), Error> {
         let empty_file = RecentlyUsed { bookmarks: vec![] };
-        let serialized = to_string(&empty_file).map_err(Error::Serialization)?;
+        let serialized = quick_to_string(&empty_file).map_err(Error::Serialization)?;
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)
