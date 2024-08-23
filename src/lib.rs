@@ -52,6 +52,73 @@ pub struct Bookmark {
     /// When the file was last visited.
     #[serde(rename = "@visited")]
     pub visited: String,
+    /// Additional metadata and applications related to the bookmark.
+    #[serde(rename = "info")]
+    pub info: Option<Info>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct Info {
+    /// Metadata about the bookmark.
+    #[serde(rename = "metadata")]
+    pub metadata: Metadata,
+}
+
+/// Metadata containing MIME type and application info.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct Metadata {
+    /// The owner of the metadata.
+    #[serde(rename = "@owner")]
+    pub owner: String,
+
+    /// The MIME type information.
+    #[serde(rename = "mime:mime-type")]
+    pub mime_type: Option<MimeType>,
+
+    /// The applications that have accessed the file.
+    #[serde(rename = "bookmark:applications")]
+    pub applications: Option<Applications>,
+}
+
+/// The MIME type of the file.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct MimeType {
+    /// The type of the file (e.g., "text/markdown").
+    #[serde(rename = "@type")]
+    pub mime_type: String,
+}
+
+/// A list of applications that accessed the bookmark.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct Applications {
+    /// The list of applications.
+    #[serde(rename = "bookmark:application")]
+    pub applications: Vec<Application>,
+}
+
+/// An application that accessed the bookmark.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct Application {
+    /// The name of the application.
+    #[serde(rename = "@name")]
+    pub name: String,
+
+    /// The command used to execute the application.
+    #[serde(rename = "@exec")]
+    pub exec: String,
+
+    /// When the application last modified the bookmark.
+    #[serde(rename = "@modified")]
+    pub modified: String,
+
+    /// The number of times the application has accessed the bookmark.
+    #[serde(rename = "@count")]
+    pub count: u32,
 }
 
 /// An error that can occur when accessing recently-used files.
@@ -110,23 +177,51 @@ pub fn parse_file() -> Result<RecentlyUsed, Error> {
 /// - If there is an issue writing the updated list back to the file system.
 pub fn update_recently_used(element_path: &PathBuf) -> Result<(), Error> {
     let mut parsed_file = parse_file()?;
-
+    let href = path_to_href(element_path).ok_or(Error::Path)?;
     let metadata = element_path.metadata().map_err(Error::Metadata)?;
     let added = system_time_to_string(metadata.created().map_err(Error::Metadata)?);
     let modified = system_time_to_string(metadata.modified().map_err(Error::Metadata)?);
     let visited = system_time_to_string(metadata.accessed().map_err(Error::Metadata)?);
-    let href = path_to_href(element_path).ok_or(Error::Path)?;
 
-    let bookmark = Bookmark {
-        href,
-        added,
-        modified,
-        visited,
+    let mut removed_bookmark = None;
+    parsed_file.bookmarks.retain(|b| {
+        let should_retain = b.href != href;
+        if !should_retain {
+            removed_bookmark = Some(b.clone()); // Salva il bookmark rimosso
+        }
+        should_retain
+    });
+
+    let new_bookmark = match removed_bookmark {
+        Some(mut old_bookmark) => {
+            old_bookmark.added = added;
+            old_bookmark.modified = modified;
+            old_bookmark.visited = visited;
+            old_bookmark
+        }
+        None => {
+            let info = Info {
+                metadata: Metadata {
+                    owner: "http://freedesktop.org".to_string(),
+                    mime_type: None,
+                    applications: None,
+                },
+            };
+
+            //TODO fill info fields
+            let bookmark = Bookmark {
+                href,
+                added,
+                modified,
+                visited,
+                info: Some(info),
+            };
+
+            bookmark
+        }
     };
 
-    // Remove the old bookmark if it exists, and add the updated one
-    parsed_file.bookmarks.retain(|b| b.href != bookmark.href);
-    parsed_file.bookmarks.push(bookmark);
+    parsed_file.bookmarks.push(new_bookmark);
 
     let serialized = quick_to_string(&parsed_file).map_err(Error::Serialization)?;
 
