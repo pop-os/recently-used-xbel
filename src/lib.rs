@@ -318,7 +318,7 @@ mod tests {
     #[test]
     fn test_update_recenty_used() -> Result<(), Box<dyn std::error::Error>> {
         let temp_dir = tempdir()?;
-        let temp_file_path = temp_dir.path().join("test_file.json");
+        let temp_file_path = temp_dir.path().join("test_file.txt");
         let recently_used_path = dir().ok_or(Error::DoesNotExist)?;
 
         fs::write(&temp_file_path, b"Test content")?;
@@ -333,8 +333,18 @@ mod tests {
             String::from("test"),
         )?;
 
+        // check new file name is in recents
         let content = fs::read_to_string(recently_used_path)?;
         assert!(content.contains("test_file.txt"));
+        
+        let deserialized = parse_file()?;
+        
+        assert!(deserialized.bookmarks.len() > 0);
+        
+        let bookmark = deserialized.bookmarks.iter().find(|el| el.href.contains("test_file"));
+        
+        assert!(bookmark.is_some());
+        
         Ok(())
     }
 
