@@ -192,6 +192,8 @@ pub fn update_recently_used(element_path: &PathBuf) -> Result<(), Error> {
         should_retain
     });
 
+    println!("removed bookmark: {:?}", removed_bookmark);
+
     let new_bookmark = match removed_bookmark {
         Some(mut old_bookmark) => {
             old_bookmark.added = added;
@@ -200,10 +202,14 @@ pub fn update_recently_used(element_path: &PathBuf) -> Result<(), Error> {
             old_bookmark
         }
         None => {
+            let mime = match mime_from_path(&element_path) {
+                Some(mime) => Some(MimeType { mime_type: mime }),
+                None => None,
+            };
             let info = Info {
                 metadata: Metadata {
                     owner: "http://freedesktop.org".to_string(),
-                    mime_type: None,
+                    mime_type: mime,
                     applications: None,
                 },
             };
@@ -253,6 +259,19 @@ fn path_to_href(path: &PathBuf) -> Option<String> {
         .map(|url| url.into_string())
 }
 
+fn mime_from_path(path: &PathBuf) -> Option<String> {
+    let path = path.to_string_lossy().to_string();
+    println!("path to infer: {:?}", path);
+    let kind = mime_guess::from_path(path);
+    println!("mimetype: {:?}", kind);
+    let mime = kind.first();
+    let mime = match mime {
+        Some(mime) => mime,
+        None => return None,
+    };
+    Some(format!("{}/{}", mime.type_(), mime.subtype()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -262,7 +281,7 @@ mod tests {
     #[test]
     fn test_update_recenty_used() -> Result<(), Box<dyn std::error::Error>> {
         let temp_dir = tempdir()?;
-        let temp_file_path = temp_dir.path().join("test_file.txt");
+        let temp_file_path = temp_dir.path().join("test_file.json");
         let recently_used_path = dir().ok_or(Error::DoesNotExist)?;
 
         fs::write(&temp_file_path, b"Test content")?;
