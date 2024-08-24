@@ -32,7 +32,7 @@ use url::Url;
 #[serde(rename = "xbel", rename_all = "kebab-case")]
 pub struct RecentlyUsed {
     /// Files that have been recently used.
-    #[serde(rename = "bookmark")]
+    #[serde(rename = "bookmark", default)]
     pub bookmarks: Vec<Bookmark>,
 }
 
@@ -78,8 +78,8 @@ pub struct Metadata {
     pub mime_type: Option<MimeType>,
 
     /// The applications that have accessed the file.
-    #[serde(rename = "bookmark:applications")]
-    pub applications: Option<Applications>,
+    #[serde(rename = "applications")]
+    pub applications: Applications,
 }
 
 /// The MIME type of the file.
@@ -96,7 +96,7 @@ pub struct MimeType {
 #[serde(rename_all = "kebab-case")]
 pub struct Applications {
     /// The list of applications.
-    #[serde(rename = "bookmark:application")]
+    #[serde(rename = "application")]
     pub applications: Vec<Application>,
 }
 
@@ -175,7 +175,11 @@ pub fn parse_file() -> Result<RecentlyUsed, Error> {
 /// - If the file's metadata cannot be accessed or read.
 /// - If the recently used file list cannot be parsed or serialized.
 /// - If there is an issue writing the updated list back to the file system.
-pub fn update_recently_used(element_path: &PathBuf) -> Result<(), Error> {
+pub fn update_recently_used(
+    element_path: &PathBuf,
+    app_name: String,
+    exec: String,
+) -> Result<(), Error> {
     let mut parsed_file = parse_file()?;
     let href = path_to_href(element_path).ok_or(Error::Path)?;
     let metadata = element_path.metadata().map_err(Error::Metadata)?;
@@ -187,18 +191,43 @@ pub fn update_recently_used(element_path: &PathBuf) -> Result<(), Error> {
     parsed_file.bookmarks.retain(|b| {
         let should_retain = b.href != href;
         if !should_retain {
-            removed_bookmark = Some(b.clone()); // Salva il bookmark rimosso
+            removed_bookmark = Some(b.clone());
         }
         should_retain
     });
-
-    println!("removed bookmark: {:?}", removed_bookmark);
 
     let new_bookmark = match removed_bookmark {
         Some(mut old_bookmark) => {
             old_bookmark.added = added;
             old_bookmark.modified = modified;
             old_bookmark.visited = visited;
+            let mut removed_application = None;
+            match old_bookmark.info.as_mut() {
+                Some(info) => info.metadata.applications.applications.retain(|el| {
+                    let should_retain = el.name != app_name;
+                    if !should_retain {
+                        removed_application = Some(el.clone());
+                    }
+                    should_retain
+                }),
+                None => {}
+            }
+            match removed_application {
+                Some(mut removed) => {
+                    removed.count += 1;
+                    match old_bookmark.info.as_mut() {
+                        Some(old_bookmark) => {
+                            old_bookmark
+                                .metadata
+                                .applications
+                                .applications
+                                .push(removed);
+                        }
+                        None => {}
+                    }
+                }
+                None => {}
+            }
             old_bookmark
         }
         None => {
@@ -206,15 +235,23 @@ pub fn update_recently_used(element_path: &PathBuf) -> Result<(), Error> {
                 Some(mime) => Some(MimeType { mime_type: mime }),
                 None => None,
             };
+
+            let mut applications: Vec<Application> = Vec::new();
+            applications.push(Application {
+                name: app_name,
+                exec,
+                modified: modified.clone(),
+                count: 1,
+            });
+
             let info = Info {
                 metadata: Metadata {
                     owner: "http://freedesktop.org".to_string(),
                     mime_type: mime,
-                    applications: None,
+                    applications: Applications { applications },
                 },
             };
 
-            //TODO fill info fields
             let bookmark = Bookmark {
                 href,
                 added,
@@ -290,7 +327,11 @@ mod tests {
             create_empty_recently_used_file(&recently_used_path)?;
         }
 
-        update_recently_used(&temp_file_path)?;
+        update_recently_used(
+            &temp_file_path,
+            String::from("org.test"),
+            String::from("test"),
+        )?;
 
         let content = fs::read_to_string(recently_used_path)?;
         assert!(content.contains("test_file.txt"));

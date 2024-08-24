@@ -1,4 +1,8 @@
-use std::{fs::{self, File}, io::Write, path::PathBuf};
+use std::{
+    fs::{self, File},
+    io::Write,
+    path::PathBuf,
+};
 
 use recently_used_xbel::update_recently_used;
 
@@ -8,13 +12,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     file.write_all(b"Hello, world!")?;
 
     let path = PathBuf::from("./foo.txt");
-    
+
     println!("canonicalized: {:?}", fs::canonicalize(&path));
-    
+
     let path = fs::canonicalize(&path)?;
 
-    let res = update_recently_used(&path);
-    
+    let res = update_recently_used(
+        &path,
+        "org.cosmic.cosmic-files".to_string(),
+        String::from("cosmic-files"),
+    );
+
     println!("res: {:?}", res);
 
     Ok(())
