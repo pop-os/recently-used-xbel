@@ -16,21 +16,26 @@
 //! ```
 
 use chrono::{DateTime, SecondsFormat, Utc};
-use quick_xml::se::to_string as quick_to_string;
+use custom_writer::custom_write;
 use quick_xml::DeError;
 use serde::{Deserialize, Serialize};
 use std::{
-    fs::{self, OpenOptions},
-    io::Write,
+    fs::{self},
     path::PathBuf,
     time::SystemTime,
 };
 use url::Url;
+mod custom_writer;
 
 /// Stores recently-opened files accessed by the desktop user.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename = "xbel", rename_all = "kebab-case")]
 pub struct RecentlyUsed {
+    #[serde(rename = "@xmlns:bookmark")]
+    pub xmlns_bookmark: String,
+    #[serde(rename = "@xmlns:mime")]
+    pub xmlns_mime: String,
+
     /// Files that have been recently used.
     #[serde(rename = "bookmark", default)]
     pub bookmarks: Vec<Bookmark>,
@@ -74,7 +79,7 @@ pub struct Metadata {
     pub owner: String,
 
     /// The MIME type information.
-    #[serde(rename = "mime:mime-type")]
+    #[serde(rename = "mime-type")]
     pub mime_type: Option<MimeType>,
 
     /// The applications that have accessed the file.
@@ -96,6 +101,7 @@ pub struct MimeType {
 #[serde(rename_all = "kebab-case")]
 pub struct Applications {
     /// The list of applications.
+    //#[serde(rename(deserialize="application", serialize="bookmark:applications"))]
     #[serde(rename = "application")]
     pub applications: Vec<Application>,
 }
@@ -129,7 +135,7 @@ pub enum Error {
     #[error("~/.local/share/recently-used.xbel: could not deserialize")]
     Deserialization(#[source] DeError),
     #[error("could not serialize new file")]
-    Serialization(#[source] DeError),
+    Serialization(#[source] Option<DeError>),
     #[error("could not read recents file")]
     Read(#[source] std::io::Error),
     #[error("could not read metadata from path")]
@@ -152,7 +158,6 @@ pub fn parse_file() -> Result<RecentlyUsed, Error> {
     quick_xml::de::from_str(&file_content).map_err(|err| Error::Deserialization(err))
 }
 
-
 /// Updates the list of recently used files.
 ///
 /// This function checks if the specified file already exists in the recently used list.
@@ -168,7 +173,7 @@ pub fn parse_file() -> Result<RecentlyUsed, Error> {
 /// * `element_path` - A `PathBuf` that represents the path to the file being updated or added.
 /// * `app_name` - A `String` representing the name of the application associated with the file.
 /// * `exec` - A `String` representing the command to execute the application.
-/// * `owner` - An optional `String` representing the owner of the metadata. If not provided, 
+/// * `owner` - An optional `String` representing the owner of the metadata. If not provided,
 ///   defaults to `"http://freedesktop.org"`.
 ///
 /// # Returns
@@ -261,18 +266,12 @@ pub fn update_recently_used(
         parsed_file.bookmarks.push(new_bookmark);
     }
 
-    let serialized = quick_to_string(&parsed_file).map_err(Error::Serialization)?;
+    let serialized = custom_write(parsed_file.clone())?;
     let recently_used_file_path = dir().ok_or(Error::DoesNotExist)?;
+    let xml_declaration = r#"<?xml version="1.0" encoding="UTF-8"?>"#;
+    let full_content = format!("{}{}", xml_declaration, serialized);
 
-    let mut file = OpenOptions::new()
-        .write(true)
-        .truncate(true)
-        .create(true)
-        .open(recently_used_file_path)
-        .map_err(|_| Error::Update)?;
-
-    file.write_all(serialized.as_bytes())
-        .map_err(|_| Error::Update)?;
+    fs::write(recently_used_file_path, full_content).map_err(|_| Error::Update)?;
 
     Ok(())
 }
@@ -324,6 +323,7 @@ mod tests {
             &temp_file_path,
             String::from("org.test"),
             String::from("test"),
+            None,
         )?;
 
         // check new file name is in recents
