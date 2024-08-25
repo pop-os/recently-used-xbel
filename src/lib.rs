@@ -15,7 +15,7 @@
 //! }
 //! ```
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, SecondsFormat, Utc};
 use quick_xml::se::to_string as quick_to_string;
 use quick_xml::DeError;
 use serde::{Deserialize, Serialize};
@@ -285,8 +285,7 @@ pub fn update_recently_used(
 
 fn system_time_to_string(time: SystemTime) -> String {
     let datetime: DateTime<Utc> = time.into();
-    // Format the DateTime as a string ISO 8601
-    datetime.to_rfc3339()
+    datetime.to_rfc3339_opts(SecondsFormat::Micros, true)
 }
 
 fn path_to_href(path: &PathBuf) -> Option<String> {
@@ -336,15 +335,18 @@ mod tests {
         // check new file name is in recents
         let content = fs::read_to_string(recently_used_path)?;
         assert!(content.contains("test_file.txt"));
-        
+
         let deserialized = parse_file()?;
-        
+
         assert!(deserialized.bookmarks.len() > 0);
-        
-        let bookmark = deserialized.bookmarks.iter().find(|el| el.href.contains("test_file"));
-        
+
+        let bookmark = deserialized
+            .bookmarks
+            .iter()
+            .find(|el| el.href.contains("test_file"));
+
         assert!(bookmark.is_some());
-        
+
         Ok(())
     }
 

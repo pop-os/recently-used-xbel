@@ -24,6 +24,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     println!("res: {:?}", res);
+    fs::remove_file(&path)?;
+    println!("file deleted");
 
     Ok(())
 }
