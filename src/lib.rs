@@ -152,7 +152,6 @@ pub fn parse_file() -> Result<RecentlyUsed, Error> {
     quick_xml::de::from_str(&file_content).map_err(|err| Error::Deserialization(err))
 }
 
-
 /// Updates the list of recently used files.
 ///
 /// This function checks if the specified file already exists in the recently used list.
@@ -194,101 +193,65 @@ pub fn update_recently_used(
     let modified = system_time_to_string(metadata.modified().map_err(Error::Metadata)?);
     let visited = system_time_to_string(metadata.accessed().map_err(Error::Metadata)?);
 
-    let mut removed_bookmark = None;
-    parsed_file.bookmarks.retain(|b| {
-        let should_retain = b.href != href;
-        if !should_retain {
-            removed_bookmark = Some(b.clone());
-        }
-        should_retain
-    });
+    // Attempt to find the existing bookmark and update it if found
+    let existing_bookmark = parsed_file.bookmarks.iter_mut().find(|b| b.href == href);
 
-    let new_bookmark = match removed_bookmark {
-        Some(mut old_bookmark) => {
-            old_bookmark.added = added;
-            old_bookmark.modified = modified.clone();
-            old_bookmark.visited = visited;
-            let mut removed_application = None;
-            match old_bookmark.info.as_mut() {
-                Some(info) => info.metadata.applications.applications.retain(|el| {
-                    let should_retain = el.name != app_name;
-                    if !should_retain {
-                        removed_application = Some(el.clone());
-                    }
-                    should_retain
-                }),
-                None => {}
+    if let Some(bookmark) = existing_bookmark {
+        // Bookmark exists, update the metadata
+        bookmark.added = added;
+        bookmark.modified = modified.clone();
+        bookmark.visited = visited;
+
+        // Find the application entry or insert a new one
+        if let Some(info) = bookmark.info.as_mut() {
+            if let Some(app) = info
+                .metadata
+                .applications
+                .applications
+                .iter_mut()
+                .find(|el| el.name == app_name)
+            {
+                app.count += 1;
+                app.modified = modified.clone();
+            } else {
+                // Application not found, insert a new one
+                info.metadata.applications.applications.push(Application {
+                    name: app_name,
+                    exec,
+                    modified: modified.clone(),
+                    count: 1,
+                });
             }
-            match removed_application {
-                Some(mut removed) => {
-                    removed.count += 1;
-                    match old_bookmark.info.as_mut() {
-                        Some(old_bookmark) => {
-                            old_bookmark
-                                .metadata
-                                .applications
-                                .applications
-                                .push(removed);
-                        }
-                        None => {}
-                    }
-                }
-                None => {
-                    let new_application = Application {
-                        name: app_name,
-                        exec,
-                        modified,
-                        count: 1,
-                    };
-                    match old_bookmark.info.as_mut() {
-                        Some(old_bookmark) => {
-                            old_bookmark
-                                .metadata
-                                .applications
-                                .applications
-                                .push(new_application);
-                        }
-                        None => {}
-                    }
-                }
-            }
-            old_bookmark
         }
-        None => {
-            let mime = match mime_from_path(&element_path) {
-                Some(mime) => Some(MimeType { mime_type: mime }),
-                None => None,
-            };
+    } else {
+        // Bookmark does not exist, create a new one
+        let mime = mime_from_path(&element_path).map(|mime| MimeType { mime_type: mime });
 
-            let mut applications: Vec<Application> = Vec::new();
-            applications.push(Application {
-                name: app_name,
-                exec,
-                modified: modified.clone(),
-                count: 1,
-            });
+        let applications = vec![Application {
+            name: app_name,
+            exec,
+            modified: modified.clone(),
+            count: 1,
+        }];
 
-            let info = Info {
-                metadata: Metadata {
-                    owner: "http://freedesktop.org".to_string(),
-                    mime_type: mime,
-                    applications: Applications { applications },
-                },
-            };
+        let info = Info {
+            metadata: Metadata {
+                owner: "http://freedesktop.org".to_string(),
+                mime_type: mime,
+                applications: Applications { applications },
+            },
+        };
 
-            let bookmark = Bookmark {
-                href,
-                added,
-                modified,
-                visited,
-                info: Some(info),
-            };
+        let new_bookmark = Bookmark {
+            href,
+            added,
+            modified,
+            visited,
+            info: Some(info),
+        };
 
-            bookmark
-        }
-    };
-
-    parsed_file.bookmarks.push(new_bookmark);
+        parsed_file.bookmarks.push(new_bookmark);
+    }
 
     let serialized = quick_to_string(&parsed_file).map_err(Error::Serialization)?;
     let recently_used_file_path = dir().ok_or(Error::DoesNotExist)?;
