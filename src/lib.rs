@@ -152,6 +152,7 @@ pub fn parse_file() -> Result<RecentlyUsed, Error> {
     quick_xml::de::from_str(&file_content).map_err(|err| Error::Deserialization(err))
 }
 
+
 /// Updates the list of recently used files.
 ///
 /// This function checks if the specified file already exists in the recently used list.
@@ -167,6 +168,8 @@ pub fn parse_file() -> Result<RecentlyUsed, Error> {
 /// * `element_path` - A `PathBuf` that represents the path to the file being updated or added.
 /// * `app_name` - A `String` representing the name of the application associated with the file.
 /// * `exec` - A `String` representing the command to execute the application.
+/// * `owner` - An optional `String` representing the owner of the metadata. If not provided, 
+///   defaults to `"http://freedesktop.org"`.
 ///
 /// # Returns
 ///
