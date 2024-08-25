@@ -19,8 +19,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let res = update_recently_used(
         &path,
-        "org.cosmic.cosmic-files".to_string(),
-        String::from("cosmic-files"),
+        "org.cosmic.test-script".to_string(),
+        String::from("test-script"),
     );
 
     println!("res: {:?}", res);

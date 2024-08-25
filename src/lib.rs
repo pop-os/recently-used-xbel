@@ -196,10 +196,11 @@ pub fn update_recently_used(
         should_retain
     });
 
+    //TODO se c'è già un application e chiamo questa funzione con un nome app diverso da quello che già c'è allora l'array non viene aggiornato aggiungendo l'application
     let new_bookmark = match removed_bookmark {
         Some(mut old_bookmark) => {
             old_bookmark.added = added;
-            old_bookmark.modified = modified;
+            old_bookmark.modified = modified.clone();
             old_bookmark.visited = visited;
             let mut removed_application = None;
             match old_bookmark.info.as_mut() {
@@ -226,7 +227,24 @@ pub fn update_recently_used(
                         None => {}
                     }
                 }
-                None => {}
+                None => {
+                    let new_application = Application {
+                        name: app_name,
+                        exec,
+                        modified,
+                        count: 1,
+                    };
+                    match old_bookmark.info.as_mut() {
+                        Some(old_bookmark) => {
+                            old_bookmark
+                                .metadata
+                                .applications
+                                .applications
+                                .push(new_application);
+                        }
+                        None => {}
+                    }
+                }
             }
             old_bookmark
         }
