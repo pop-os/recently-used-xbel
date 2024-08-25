@@ -21,6 +21,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &path,
         "org.cosmic.test-script".to_string(),
         String::from("test-script"),
+        None
     );
 
     println!("res: {:?}", res);

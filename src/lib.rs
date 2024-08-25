@@ -185,7 +185,12 @@ pub fn update_recently_used(
     element_path: &PathBuf,
     app_name: String,
     exec: String,
+    owner: Option<String>,
 ) -> Result<(), Error> {
+    let owner = match owner {
+        Some(owner) => owner,
+        None => "http://freedesktop.org".to_string(),
+    };
     let mut parsed_file = parse_file()?;
     let href = path_to_href(element_path).ok_or(Error::Path)?;
     let metadata = element_path.metadata().map_err(Error::Metadata)?;
@@ -236,7 +241,7 @@ pub fn update_recently_used(
 
         let info = Info {
             metadata: Metadata {
-                owner: "http://freedesktop.org".to_string(),
+                owner,
                 mime_type: mime,
                 applications: Applications { applications },
             },
