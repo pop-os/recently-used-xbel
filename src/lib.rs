@@ -152,15 +152,22 @@ pub fn parse_file() -> Result<RecentlyUsed, Error> {
     quick_xml::de::from_str(&file_content).map_err(|err| Error::Deserialization(err))
 }
 
+
 /// Updates the list of recently used files.
 ///
 /// This function checks if the specified file already exists in the recently used list.
-/// If it exists, the function updates the file's metadata (such as added, modified, and visited).
-/// If it does not exist, the function adds a new entry for the file.
+/// If it exists, the function updates the file's metadata, including the times when the file was
+/// added, modified, and last visited. If the file does not exist in the list, the function adds
+/// a new entry for the file.
+///
+/// If the file already exists in the list, the function also updates the application's usage count,
+/// or adds a new application entry if it hasn't been recorded previously.
 ///
 /// # Arguments
 ///
 /// * `element_path` - A `PathBuf` that represents the path to the file being updated or added.
+/// * `app_name` - A `String` representing the name of the application associated with the file.
+/// * `exec` - A `String` representing the command to execute the application.
 ///
 /// # Returns
 ///
@@ -196,7 +203,6 @@ pub fn update_recently_used(
         should_retain
     });
 
-    //TODO se c'è già un application e chiamo questa funzione con un nome app diverso da quello che già c'è allora l'array non viene aggiornato aggiungendo l'application
     let new_bookmark = match removed_bookmark {
         Some(mut old_bookmark) => {
             old_bookmark.added = added;
@@ -285,7 +291,6 @@ pub fn update_recently_used(
     parsed_file.bookmarks.push(new_bookmark);
 
     let serialized = quick_to_string(&parsed_file).map_err(Error::Serialization)?;
-
     let recently_used_file_path = dir().ok_or(Error::DoesNotExist)?;
 
     let mut file = OpenOptions::new()
