@@ -1,3 +1,6 @@
+// Copyright 2024 System76 <info@system76.com>
+// SPDX-License-Identifier: MPL-2.0
+
 use crate::RecentlyUsed;
 use quick_xml::writer::Writer;
 use quick_xml::Error;

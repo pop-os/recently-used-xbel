@@ -283,16 +283,12 @@ fn system_time_to_string(time: SystemTime) -> String {
 
 fn path_to_href(path: &PathBuf) -> Option<String> {
     let path_str = path.to_str()?;
-    Url::from_file_path(path_str)
-        .ok()
-        .map(|url| url.into_string())
+    Url::from_file_path(path_str).ok().map(Into::into)
 }
 
 fn mime_from_path(path: &PathBuf) -> Option<String> {
     let path = path.to_string_lossy().to_string();
-    println!("path to infer: {:?}", path);
     let kind = mime_guess::from_path(path);
-    println!("mimetype: {:?}", kind);
     let mime = kind.first();
     let mime = match mime {
         Some(mime) => mime,
@@ -304,7 +300,10 @@ fn mime_from_path(path: &PathBuf) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
+    use std::{
+        fs::{self, OpenOptions},
+        io::Write,
+    };
     use tempfile::tempdir;
 
     #[test]
@@ -345,8 +344,13 @@ mod tests {
     }
 
     fn create_empty_recently_used_file(path: &PathBuf) -> Result<(), Error> {
-        let empty_file = RecentlyUsed { bookmarks: vec![] };
-        let serialized = quick_to_string(&empty_file).map_err(Error::Serialization)?;
+        let empty_file = RecentlyUsed {
+            bookmarks: vec![],
+            xmlns_mime: String::new(),
+            xmlns_bookmark: String::new(),
+        };
+        let serialized =
+            quick_xml::se::to_string(&empty_file).map_err(|why| Error::Serialization(Some(why)))?;
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)
