@@ -20,8 +20,9 @@ use custom_writer::custom_write;
 use quick_xml::DeError;
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::HashSet,
     fs::{self},
-    path::PathBuf,
+    path::{Path, PathBuf},
     time::SystemTime,
 };
 use url::Url;
@@ -276,7 +277,7 @@ pub fn update_recently_used(
     Ok(())
 }
 
-/// Removes an entry from the list of recently used files.
+/// Removes elements from the list of recently used files.
 ///
 /// # Arguments
 ///
@@ -295,11 +296,15 @@ pub fn update_recently_used(
 /// - If the file's metadata cannot be accessed or read.
 /// - If the recently used file list cannot be parsed or serialized.
 /// - If there is an issue writing the updated list back to the file system.
-pub fn remove_recently_used(element_path: &PathBuf) -> Result<(), Error> {
+pub fn remove_recently_used(element_paths: &[&Path]) -> Result<(), Error> {
     let mut parsed_file = parse_file()?;
-    let href = path_to_href(element_path).ok_or(Error::Path)?;
 
-    parsed_file.bookmarks.retain(|b| b.href != href);
+    let mut hrefs = HashSet::with_capacity(element_paths.len());
+    for path in element_paths {
+        hrefs.insert(path_to_href(path).ok_or(Error::Path)?);
+    }
+
+    parsed_file.bookmarks.retain(|b| !hrefs.contains(&b.href));
 
     let serialized = custom_write(parsed_file.clone())?;
     let recently_used_file_path = dir().ok_or(Error::DoesNotExist)?;
@@ -316,12 +321,12 @@ fn system_time_to_string(time: SystemTime) -> String {
     datetime.to_rfc3339_opts(SecondsFormat::Micros, true)
 }
 
-fn path_to_href(path: &PathBuf) -> Option<String> {
+fn path_to_href(path: &Path) -> Option<String> {
     let path_str = path.to_str()?;
     Url::from_file_path(path_str).ok().map(Into::into)
 }
 
-fn mime_from_path(path: &PathBuf) -> Option<String> {
+fn mime_from_path(path: &Path) -> Option<String> {
     let path = path.to_string_lossy().to_string();
     let kind = mime_guess::from_path(path);
     let mime = kind.first();
@@ -377,7 +382,7 @@ mod tests {
 
         let length_before_remove = deserialized.bookmarks.len();
 
-        remove_recently_used(&temp_file_path)?;
+        remove_recently_used(&[&temp_file_path])?;
 
         // Check that the file name was removed from recents
         let content = fs::read_to_string(&recently_used_path)?;
