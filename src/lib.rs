@@ -276,6 +276,41 @@ pub fn update_recently_used(
     Ok(())
 }
 
+/// Removes an entry from the list of recently used files.
+///
+/// # Arguments
+///
+/// * `element_path` - A `PathBuf` that represents the path to the file being removed.
+///
+/// # Returns
+///
+/// This function returns `Result<(), Error>`, which is:
+/// - `Ok(())` on success.
+/// - `Err(Error)` if there is a failure in processing the file (e.g., reading metadata, serialization, or file I/O).
+///
+/// # Errors
+///
+/// This function can return errors in the following cases:
+///
+/// - If the file's metadata cannot be accessed or read.
+/// - If the recently used file list cannot be parsed or serialized.
+/// - If there is an issue writing the updated list back to the file system.
+pub fn remove_recently_used(element_path: &PathBuf) -> Result<(), Error> {
+    let mut parsed_file = parse_file()?;
+    let href = path_to_href(element_path).ok_or(Error::Path)?;
+
+    parsed_file.bookmarks.retain(|b| b.href != href);
+
+    let serialized = custom_write(parsed_file.clone())?;
+    let recently_used_file_path = dir().ok_or(Error::DoesNotExist)?;
+    let xml_declaration = r#"<?xml version="1.0" encoding="UTF-8"?>"#;
+    let full_content = format!("{}{}", xml_declaration, serialized);
+
+    fs::write(recently_used_file_path, full_content).map_err(|_| Error::Update)?;
+
+    Ok(())
+}
+
 fn system_time_to_string(time: SystemTime) -> String {
     let datetime: DateTime<Utc> = time.into();
     datetime.to_rfc3339_opts(SecondsFormat::Micros, true)
@@ -326,7 +361,7 @@ mod tests {
         )?;
 
         // check new file name is in recents
-        let content = fs::read_to_string(recently_used_path)?;
+        let content = fs::read_to_string(&recently_used_path)?;
         assert!(content.contains("test_file.txt"));
 
         let deserialized = parse_file()?;
@@ -339,6 +374,25 @@ mod tests {
             .find(|el| el.href.contains("test_file"));
 
         assert!(bookmark.is_some());
+
+        let length_before_remove = deserialized.bookmarks.len();
+
+        remove_recently_used(&temp_file_path)?;
+
+        // Check that the file name was removed from recents
+        let content = fs::read_to_string(&recently_used_path)?;
+        assert!(!content.contains("test_file.txt"));
+
+        let deserialized = parse_file()?;
+
+        assert!(deserialized.bookmarks.len() == length_before_remove - 1);
+
+        let bookmark = deserialized
+            .bookmarks
+            .iter()
+            .find(|el| el.href.contains("test_file"));
+
+        assert!(bookmark.is_none());
 
         Ok(())
     }
