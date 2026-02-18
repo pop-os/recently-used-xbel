@@ -186,7 +186,7 @@ pub fn clear_recently_used() -> Result<(), Error> {
 ///
 /// # Arguments
 ///
-/// * `element_path` - A `PathBuf` that represents the path to the file being updated or added.
+/// * `element_path` - A `Path` that represents the path to the file being updated or added.
 /// * `app_name` - A `String` representing the name of the application associated with the file.
 /// * `exec` - A `String` representing the command to execute the application.
 /// * `owner` - An optional `String` representing the owner of the metadata. If not provided,
@@ -206,7 +206,7 @@ pub fn clear_recently_used() -> Result<(), Error> {
 /// - If the recently used file list cannot be parsed or serialized.
 /// - If there is an issue writing the updated list back to the file system.
 pub fn update_recently_used(
-    element_path: &PathBuf,
+    element_path: &Path,
     app_name: String,
     exec: String,
     owner: Option<String>,
