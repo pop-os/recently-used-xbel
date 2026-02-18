@@ -159,6 +159,21 @@ pub fn parse_file() -> Result<RecentlyUsed, Error> {
     quick_xml::de::from_str(&file_content).map_err(|err| Error::Deserialization(err))
 }
 
+/// Clear the list of recently used files.
+pub fn clear_recently_used() -> Result<(), Error> {
+    let mut parsed_file = parse_file()?;
+    parsed_file.bookmarks.clear();
+
+    let serialized = custom_write(parsed_file.clone())?;
+    let recently_used_file_path = dir().ok_or(Error::DoesNotExist)?;
+    let xml_declaration = r#"<?xml version="1.0" encoding="UTF-8"?>"#;
+    let full_content = format!("{}{}", xml_declaration, serialized);
+
+    fs::write(recently_used_file_path, full_content).map_err(|_| Error::Update)?;
+
+    Ok(())
+}
+
 /// Updates the list of recently used files.
 ///
 /// This function checks if the specified file already exists in the recently used list.
